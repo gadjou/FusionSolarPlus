@@ -1,5 +1,5 @@
 
-![Logo](https://raw.githubusercontent.com/JortvanSchijndel/FusionSolarPlus/refs/heads/master/branding/logo.png)
+![Logo](https://raw.githubusercontent.com/JortvanSchijndel/FusionSolarPlus/refs/heads/master/custom_components/fusionsolarplus/brand/logo.png)
 
 <table align="center" border="0">
   <tr>
