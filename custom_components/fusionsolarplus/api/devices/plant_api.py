@@ -269,3 +269,17 @@ def get_day_start_sec() -> int:
     start_today = time.strftime("%Y-%m-%d 00:00:00", time.gmtime())
     struct_time = time.strptime(start_today, "%Y-%m-%d %H:%M:%S")
     return round(time.mktime(struct_time) * 1000)
+
+
+def refresh_livedata(client: Any, plant_dn: str) -> dict:
+    """Trigger a livedata refresh for the plant.
+
+    Forces FusionSolar backend to serve fresh energy-flow data immediately.
+    Response: {"success": true, "subscribeInfo": {"refreshPeriod": 2, "remainTime": 60}}
+    """
+    r = client._session.post(
+        url=f"https://{client._huawei_subdomain}.fusionsolar.huawei.com/rest/dp/pvms/livedata/v1/subscribe",
+        json={"domainDn": plant_dn, "featureId": 1},
+    )
+    r.raise_for_status()
+    return r.json()

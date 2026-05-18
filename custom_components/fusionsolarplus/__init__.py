@@ -8,8 +8,7 @@ from .sensor import DeviceHandlerFactory
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[str] = ["sensor", "switch", "number", "select"]
-
+PLATFORMS: list[str] = ["sensor", "switch", "number", "select", "button"]
 
 async def async_setup_entry(hass, entry):
     entry.async_on_unload(entry.add_update_listener(update_listener))
