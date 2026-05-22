@@ -34,8 +34,26 @@ class InverterDeviceHandler(BaseDeviceHandler):
         entities = []
         unique_ids = set()
 
+        # Check output mode to dynamically hide invalid entities
+        output_mode = None
+        if coordinator.data:
+            output_mode = coordinator.data.get("inverter_values", {}).get(21029)
+
+        skip_signal_ids = set()
+        if str(output_mode).strip() == "L/N":
+            # 10008 is generic grid voltage (now mirrored to 10011)
+            # 10012/10013/10015/10016 are Phase B and C metrics
+            skip_signal_ids.update([10008, 10012, 10013, 10015, 10016])
+        elif str(output_mode).strip() == "Three-phase four-wire system":
+            # Three-phase doesn't use the generic single-phase grid voltage entity
+            skip_signal_ids.add(10008)
+
         # Create normal inverter entities
         for signal in INVERTER_SIGNALS:
+            signal_id = int(signal["id"])
+            if signal_id in skip_signal_ids:
+                continue
+
             unique_id = f"{list(self.device_info['identifiers'])[0][1]}_{signal['id']}"
             if unique_id not in unique_ids:
                 entity = FusionSolarInverterSensor(
@@ -51,7 +69,6 @@ class InverterDeviceHandler(BaseDeviceHandler):
                 unique_ids.add(unique_id)
 
         self._create_pv_entities(coordinator, entities, unique_ids)
-
         self._create_optimizer_entities(coordinator, entities, unique_ids)
 
         return entities

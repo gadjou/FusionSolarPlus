@@ -177,66 +177,22 @@ def get_optimizer_stats(client: Any, inverter_id: str):
 
 def _extract_inverter_values(realtime_data: dict) -> dict[int, Any]:
     values: dict[int, Any] = {}
-
-    output_mode = None
-
-    # Find output mode first
-    for group in realtime_data.get("data", []):
-        for signal in group.get("signals", []):
-            if signal.get("id") == 21029:
-                output_mode = signal.get("value")
-                break
-
-    # Only allow specific voltage/current signals based on mode
-    allowed_phase_signals: set[int] = set()
-
-    if output_mode == "Three-phase four-wire system":
-        allowed_phase_signals = {
-            10011,  # Phase A voltage
-            10012,  # Phase B voltage
-            10013,  # Phase C voltage
-            10014,  # Grid phase A current
-            10015,  # Grid phase B current
-            10016,  # Grid phase C current
-        }
-    else:
-        # L/N mode
-        allowed_phase_signals = {
-            10008,  # Grid voltage
-            10014,  # Grid phase A current
-        }
-
-    conditional_signals = {
-        10008,
-        10011,
-        10012,
-        10013,
-        10014,
-        10015,
-        10016,
-    }
-
     for group in realtime_data.get("data", []):
         for signal in group.get("signals", []):
             signal_id = signal.get("id")
-
             if signal_id is None:
                 continue
-
-            # Hide all conditional signals unless explicitly allowed
-            if (
-                signal_id in conditional_signals
-                and signal_id not in allowed_phase_signals
-            ):
-                continue
-
             raw_value = signal.get("value")
-
             values[int(signal_id)] = _normalize_signal_value(
-                raw_value,
-                signal.get("unit"),
-                signal.get("name"),
+                raw_value, signal.get("unit"), signal.get("name")
             )
+
+    # API Layer Normalize: If single-phase L/N, mirror grid voltage (10008) into phase A voltage (10011)
+    # Output mode is signal ID 21029
+    output_mode = values.get(21029)
+    if output_mode and str(output_mode).strip() == "L/N":
+        if 10008 in values and values[10008] is not None:
+            values[10011] = values[10008]
 
     return values
 
