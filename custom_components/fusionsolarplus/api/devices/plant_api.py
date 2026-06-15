@@ -277,6 +277,7 @@ def refresh_livedata(client: Any, plant_dn: str) -> dict:
     Forces FusionSolar backend to serve fresh energy-flow data immediately.
     Response: {"success": true, "subscribeInfo": {"refreshPeriod": 2, "remainTime": 60}}
     """
+    client.keep_alive()  # Ensure session is active before subscribing    
     r = client._session.post(
         url=f"https://{client._huawei_subdomain}.fusionsolar.huawei.com/rest/dp/pvms/livedata/v1/subscribe",
         json={"domainDn": plant_dn, "featureId": 1},
