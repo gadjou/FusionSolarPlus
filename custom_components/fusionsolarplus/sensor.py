@@ -13,6 +13,8 @@ from .devices.inverter.sensor import InverterDeviceHandler
 from .devices.plant.sensor import PlantDeviceHandler
 from .devices.charger.sensor import ChargerDeviceHandler
 from .devices.battery.sensor import BatteryDeviceHandler
+from .devices.battery.config_sensor import create_config_sensors
+from .devices.battery.control import async_get_battery_control
 from .devices.powersensor.sensor import PowerSensorDeviceHandler
 from .devices.backupbox.sensor import BackupBoxDeviceHandler
 from .devices.emma.sensor import EMMADeviceHandler
@@ -66,6 +68,8 @@ async def async_setup_entry(
 
     try:
         entities = handler.create_entities(coordinator)
+        if entry.data.get("device_type") == "Battery":
+            entities += await _async_battery_config_sensors(hass, entry)
         _LOGGER.info(
             "Adding %d sensor entities for device %s", len(entities), device_name
         )
@@ -75,3 +79,16 @@ async def async_setup_entry(
             "Failed to set up sensor entities for device %s: %s", device_name, e
         )
         raise
+
+
+async def _async_battery_config_sensors(hass: HomeAssistant, entry: ConfigEntry) -> list:
+    """Read-only forced charge/discharge sensors; skipped if the config is unavailable."""
+    device_info = hass.data[DOMAIN].get(f"{entry.entry_id}_device_info")
+    if not device_info:
+        return []
+    try:
+        control = await async_get_battery_control(hass, entry, device_info)
+    except Exception as err:
+        _LOGGER.warning("Battery config sensors not created: %s", err)
+        return []
+    return create_config_sensors(control, device_info)

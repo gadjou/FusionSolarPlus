@@ -1222,6 +1222,15 @@ class FusionSolarClient:
         return battery_api.get_battery_data(self, battery_id)
 
     @logged_in
+    def get_battery_config(self, battery_id: str) -> dict:
+        return battery_api.get_battery_config(self, battery_id)
+
+    @logged_in
+    def set_battery_config(self, battery_id: str, changes: dict) -> dict:
+        """Write battery configuration signals, e.g. {230320245: "1"}."""
+        return battery_api.set_battery_config(self, battery_id, changes)
+
+    @logged_in
     def active_power_control(self, power_setting) -> None:
         """apply active power control.
         This can be useful when electricity prices are

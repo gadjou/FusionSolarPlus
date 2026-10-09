@@ -79,6 +79,12 @@ async def async_unload_entry(hass, entry):
     if unload_ok:
         hass.data[DOMAIN].pop(f"{entry.entry_id}_coordinator", None)
         hass.data[DOMAIN].pop(f"{entry.entry_id}_sensor_handler", None)
+        hass.data[DOMAIN].pop(f"{entry.entry_id}_battery_control_lock", None)
+        battery_control = hass.data[DOMAIN].pop(
+            f"{entry.entry_id}_battery_control", None
+        )
+        if battery_control is not None:
+            battery_control.unsubscribe()
         hass.data[DOMAIN].pop(entry.entry_id, None)
 
     return unload_ok
