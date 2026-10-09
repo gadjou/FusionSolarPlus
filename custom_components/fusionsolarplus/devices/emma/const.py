@@ -226,14 +226,4 @@ EMMA_CONFIG_SIGNALS = [
         "state_class": SensorStateClass.MEASUREMENT,
         "source": "config",
     },
-    {
-        "id": 230700180,
-        "name": "PV Power Priority",
-        "unit": None,
-        "custom_name": "PV Power Priority",
-        "device_class": SensorDeviceClass.ENUM,
-        "state_class": None,
-        "source": "config",
-        "enum_options": ["Battery first", "Appliances first"],
-    },
 ]
