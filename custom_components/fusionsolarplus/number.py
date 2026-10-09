@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .devices.charger.number import ChargerNumberHandler
+from .devices.battery.number import BatteryNumberHandler
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +22,8 @@ class NumberHandlerFactory:
         device_type = entry.data.get("device_type")
         if device_type == "Charger":
             return ChargerNumberHandler(hass, entry, device_info)
+        if device_type == "Battery":
+            return BatteryNumberHandler(hass, entry, device_info)
         return None
 
 
