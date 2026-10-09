@@ -8,7 +8,8 @@ battery configuration:
 - Target SOC (%) — used with the Energy mode
 
 The period and target SOC signals are only returned by the API in some states,
-so their ids are discovered at runtime (see ``find_forced_signal_id``) and the
+so their ids default to the ones seen in the web UI (230320281 / 230320246),
+are re-discovered at runtime (see ``find_forced_signal_id``) and the
 values chosen in Home Assistant are kept locally and sent together with the
 Charge/Discharge command, like the web UI does.
 """
@@ -25,7 +26,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from ...api.devices.battery_api import (
     SIGNAL_FORCED_CHARGE_DISCHARGE,
+    SIGNAL_FORCED_PERIOD,
     SIGNAL_FORCED_SETTING_MODE,
+    SIGNAL_FORCED_TARGET_SOC,
     find_forced_signal_id,
 )
 from ...const import DOMAIN
@@ -83,8 +86,8 @@ class BatteryControl:
         self.period: float | None = None
         self.target_soc: float | None = None
         # Discovered signal ids (kept once seen, the API hides them when stopped).
-        self.period_id: int | None = None
-        self.target_soc_id: int | None = None
+        self.period_id: int = SIGNAL_FORCED_PERIOD
+        self.target_soc_id: int = SIGNAL_FORCED_TARGET_SOC
         self._pending: dict[int, tuple[str, float]] = {}
         self.handle_update()
         self.unsubscribe = coordinator.async_add_listener(self.handle_update)

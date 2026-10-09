@@ -149,6 +149,10 @@ def _signals_to_value_map(
 SIGNAL_FORCED_CHARGE_DISCHARGE = 230320245
 # "Mode de paramétrage" — 0 = Duration, 1 = Energy (target SOC)
 SIGNAL_FORCED_SETTING_MODE = 230320257
+# "Période de charge/décharge forcée (min)" — used with the Duration mode
+SIGNAL_FORCED_PERIOD = 230320281
+# "SOC cible (%)" — used with the Energy mode
+SIGNAL_FORCED_TARGET_SOC = 230320246
 
 
 def get_battery_config(client: Any, battery_id: str) -> dict[int, dict[str, Any]]:
@@ -215,13 +219,19 @@ def find_forced_signal_id(signals: dict[int, dict[str, Any]], unit: str) -> int 
 
 
 def set_battery_config(client: Any, battery_id: str, changes: dict[int, str]) -> dict:
-    """Write one or more battery configuration signals in a single request."""
+    """Write one or more battery configuration signals in a single request.
+
+    Mirrors the FusionSolar web UI: set-config-signals, then signal-refresh so
+    the backend re-reads the configuration from the device.
+    """
+    base = f"https://{client._huawei_subdomain}.fusionsolar.huawei.com"
     r = client._session.post(
-        url=f"https://{client._huawei_subdomain}.fusionsolar.huawei.com/rest/neteco/config/device/v1/config/set-signal",
+        url=f"{base}/rest/pvms/web/device/v1/deviceExt/set-config-signals",
         data={
             "dn": battery_id,
             "changeValues": json.dumps(
-                [{"id": str(sid), "value": str(value)} for sid, value in changes.items()]
+                [{"id": str(sid), "value": str(value)} for sid, value in changes.items()],
+                separators=(",", ":"),
             ),
         },
         headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -229,4 +239,22 @@ def set_battery_config(client: Any, battery_id: str, changes: dict[int, str]) ->
     r.raise_for_status()
     response = r.json()
     logging.debug("set_battery_config %s %s → %s", battery_id, changes, response)
+    if response.get("code") != 0 or any(
+        item.get("code") != 0 for item in response.get("data") or []
+    ):
+        raise FusionSolarException(
+            f"set-config-signals failed for {battery_id}: {response}"
+        )
+
+    try:
+        client._session.post(
+            url=f"{base}/rest/pvms/web/monitor/v1/refresh/signal/signal-refresh",
+            json={
+                "dn": battery_id,
+                "scenes": "config",
+                "operateSerial": str(round(time.time() * 1000)),
+            },
+        ).raise_for_status()
+    except Exception:
+        logging.debug("signal-refresh failed for %s", battery_id, exc_info=True)
     return response
