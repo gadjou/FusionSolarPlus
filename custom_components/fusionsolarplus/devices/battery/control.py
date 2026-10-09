@@ -12,7 +12,8 @@ The period and target SOC signals are only returned by the API in some states,
 so their ids default to the ones seen in the web UI (230320281 / 230320246),
 are re-discovered at runtime (see ``find_forced_signal_id``) and the
 values chosen in Home Assistant are kept locally and sent together with the
-Charge/Discharge command, like the web UI does.
+Charge/Discharge command, like the web UI does. Starting is refused while a
+value needed for the chosen mode/action is empty.
 """
 
 import asyncio
@@ -22,6 +23,7 @@ from datetime import timedelta
 from typing import Any, Dict
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -172,38 +174,31 @@ class BatteryControl:
             await self.coordinator.async_request_refresh()
             return
 
-        setpoint = self._setpoint_change()
-        power = {}
-        if action == ACTION_DISCHARGE and self.discharge_power is not None:
+        self._check_setpoints(action)
+        changes = {SIGNAL_FORCED_SETTING_MODE: self.mode, **self._setpoint_change()}
+        if action == ACTION_DISCHARGE:
             power_signal = self.signal(SIGNAL_FORCED_DISCHARGE_POWER) or {"precision": 3}
-            power = {
-                SIGNAL_FORCED_DISCHARGE_POWER: _format(self.discharge_power, power_signal)
-            }
-        await self._write(
-            {
-                SIGNAL_FORCED_SETTING_MODE: self.mode,
-                **setpoint,
-                **power,
-                SIGNAL_FORCED_CHARGE_DISCHARGE: action,
-            }
-        )
-        await self.coordinator.async_refresh()
+            changes[SIGNAL_FORCED_DISCHARGE_POWER] = _format(
+                self.discharge_power, power_signal
+            )
+        changes[SIGNAL_FORCED_CHARGE_DISCHARGE] = action
+        await self._write(changes)
+        await self.coordinator.async_request_refresh()
 
-        if not setpoint:
-            # The period / target SOC signal was unknown until now: the API only
-            # exposes it once forced charge/discharge is active.
-            self._discover()
-            setpoint = self._setpoint_change()
-            if setpoint:
-                await self._write(setpoint)
-                await self.coordinator.async_request_refresh()
-            else:
-                _LOGGER.warning(
-                    "Battery %s: no %s signal found in the forced charge/discharge "
-                    "group, it was not sent",
-                    self.battery_dn,
-                    "period" if self.mode == MODE_DURATION else "target SOC",
-                )
+    def _check_setpoints(self, action: str) -> None:
+        """Refuse to start without the values the battery would otherwise pick."""
+        missing = []
+        if self.mode == MODE_DURATION and self.period is None:
+            missing.append("Forced Charge/Discharge Period")
+        if self.mode == MODE_ENERGY and self.target_soc is None:
+            missing.append("Forced Charge/Discharge Target SOC")
+        if action == ACTION_DISCHARGE and self.discharge_power is None:
+            missing.append("Forced Discharge Power")
+        if missing:
+            raise HomeAssistantError(
+                f"Set {', '.join(missing)} before starting forced "
+                f"{ACTION_OPTIONS[action].lower()}"
+            )
 
     async def async_set_mode(self, mode: str) -> None:
         self.mode = mode
