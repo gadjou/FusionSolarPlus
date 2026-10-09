@@ -8,11 +8,14 @@ from homeassistant.components.number import (
     RestoreNumber,
     ENTITY_ID_FORMAT,
 )
-from homeassistant.const import PERCENTAGE, UnitOfTime
+from homeassistant.const import PERCENTAGE, UnitOfPower, UnitOfTime
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from ...api.devices.battery_api import SIGNAL_FORCED_CHARGE_DISCHARGE
+from ...api.devices.battery_api import (
+    SIGNAL_FORCED_CHARGE_DISCHARGE,
+    SIGNAL_FORCED_DISCHARGE_POWER,
+)
 from .control import BatteryControl, async_get_battery_control
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,6 +44,9 @@ class BatteryNumberHandler:
         return [
             FusionSolarBatteryForcedPeriodNumber(self.control, self.device_info),
             FusionSolarBatteryTargetSocNumber(self.control, self.device_info),
+            FusionSolarBatteryForcedDischargePowerNumber(
+                self.control, self.device_info
+            ),
         ]
 
 
@@ -150,4 +156,32 @@ class FusionSolarBatteryTargetSocNumber(_BatteryControlNumber):
 
     async def async_set_native_value(self, value: float) -> None:
         await self._control.async_set_target_soc(value)
+        self.async_write_ha_state()
+
+
+class FusionSolarBatteryForcedDischargePowerNumber(_BatteryControlNumber):
+    """Forced discharge power in kW (sent with Discharge)."""
+
+    _key = "forced_discharge_power"
+    _label = "Forced Discharge Power"
+    _default_min = 0
+    _default_max = 3.5
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+    _attr_device_class = NumberDeviceClass.POWER
+    _attr_icon = "mdi:battery-arrow-down"
+
+    def _signal(self):
+        return self._control.signal(SIGNAL_FORCED_DISCHARGE_POWER)
+
+    @property
+    def native_value(self) -> float | None:
+        return self._control.discharge_power
+
+    def _restore(self, value: float) -> None:
+        if self._control.discharge_power is None:
+            self._control.discharge_power = value
+
+    async def async_set_native_value(self, value: float) -> None:
+        await self._control.async_set_discharge_power(value)
         self.async_write_ha_state()

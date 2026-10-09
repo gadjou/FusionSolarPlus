@@ -153,6 +153,12 @@ SIGNAL_FORCED_SETTING_MODE = 230320257
 SIGNAL_FORCED_PERIOD = 230320281
 # "SOC cible (%)" — used with the Energy mode
 SIGNAL_FORCED_TARGET_SOC = 230320246
+# "Puissance de décharge forcée (kW)"
+SIGNAL_FORCED_DISCHARGE_POWER = 230320259
+# "Temps de charge/décharge restant (min)" — read-only
+SIGNAL_FORCED_REMAINING_TIME = 230320458
+# "Énergie de la décharge (kWh)" — read-only
+SIGNAL_FORCED_DISCHARGE_ENERGY = 230320130
 
 
 def get_battery_config(client: Any, battery_id: str) -> dict[int, dict[str, Any]]:

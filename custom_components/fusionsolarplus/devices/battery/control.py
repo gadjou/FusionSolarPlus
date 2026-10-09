@@ -6,6 +6,7 @@ battery configuration:
 - Setting mode (230320257): 0 = Duration, 1 = Energy
 - Forced charge/discharge period (min) — used with the Duration mode
 - Target SOC (%) — used with the Energy mode
+- Forced discharge power (kW) — used with Discharge
 
 The period and target SOC signals are only returned by the API in some states,
 so their ids default to the ones seen in the web UI (230320281 / 230320246),
@@ -26,6 +27,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from ...api.devices.battery_api import (
     SIGNAL_FORCED_CHARGE_DISCHARGE,
+    SIGNAL_FORCED_DISCHARGE_POWER,
     SIGNAL_FORCED_PERIOD,
     SIGNAL_FORCED_SETTING_MODE,
     SIGNAL_FORCED_TARGET_SOC,
@@ -42,6 +44,7 @@ MODE_OPTIONS = {"0": "Duration", "1": "Energy"}
 MODE_DURATION = "0"
 MODE_ENERGY = "1"
 ACTION_STOP = "0"
+ACTION_DISCHARGE = "2"
 
 UNIT_PERIOD = "min"
 UNIT_TARGET_SOC = "%"
@@ -85,6 +88,7 @@ class BatteryControl:
         self.mode = MODE_DURATION
         self.period: float | None = None
         self.target_soc: float | None = None
+        self.discharge_power: float | None = None
         # Discovered signal ids (kept once seen, the API hides them when stopped).
         self.period_id: int = SIGNAL_FORCED_PERIOD
         self.target_soc_id: int = SIGNAL_FORCED_TARGET_SOC
@@ -130,6 +134,9 @@ class BatteryControl:
             self.mode = mode
         self.period = _as_float(self.value(self.period_id), self.period)
         self.target_soc = _as_float(self.value(self.target_soc_id), self.target_soc)
+        self.discharge_power = _as_float(
+            self.value(SIGNAL_FORCED_DISCHARGE_POWER), self.discharge_power
+        )
 
     # ── Writing ───────────────────────────────────────────────────────────────
 
@@ -166,10 +173,17 @@ class BatteryControl:
             return
 
         setpoint = self._setpoint_change()
+        power = {}
+        if action == ACTION_DISCHARGE and self.discharge_power is not None:
+            power_signal = self.signal(SIGNAL_FORCED_DISCHARGE_POWER) or {"precision": 3}
+            power = {
+                SIGNAL_FORCED_DISCHARGE_POWER: _format(self.discharge_power, power_signal)
+            }
         await self._write(
             {
                 SIGNAL_FORCED_SETTING_MODE: self.mode,
                 **setpoint,
+                **power,
                 SIGNAL_FORCED_CHARGE_DISCHARGE: action,
             }
         )
@@ -203,6 +217,10 @@ class BatteryControl:
     async def async_set_target_soc(self, target_soc: float) -> None:
         self.target_soc = target_soc
         await self._write_setpoint_if_visible(self.target_soc_id, target_soc)
+
+    async def async_set_discharge_power(self, power: float) -> None:
+        self.discharge_power = power
+        await self._write_setpoint_if_visible(SIGNAL_FORCED_DISCHARGE_POWER, power)
 
     async def _write_setpoint_if_visible(self, signal_id, value: float) -> None:
         """Write now if the API currently exposes the signal, else on next start."""
