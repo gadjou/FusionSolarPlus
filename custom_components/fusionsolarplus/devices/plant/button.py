@@ -97,10 +97,24 @@ class FusionSolarRefreshButton(CoordinatorEntity, ButtonEntity):
 
         # Switch to fast interval
         self.coordinator.update_interval = timedelta(seconds=refresh_period)
-        await self.coordinator.async_request_refresh()
 
         try:
-            await asyncio.sleep(remain_time)
+            # Right after subscribing, FusionSolar still serves cached values.
+            # Poll every second (bypassing the 10s request debouncer) until the
+            # data changes, so fresh values show up as soon as they exist
+            # instead of one full refresh_period later.
+            previous = self.coordinator.data
+            deadline = refresh_period + 2
+            elapsed = 0
+            while elapsed < deadline:
+                await self.coordinator.async_refresh()
+                if self.coordinator.data != previous:
+                    _LOGGER.debug("Live session: fresh data after %ss", elapsed)
+                    break
+                await asyncio.sleep(1)
+                elapsed += 1
+
+            await asyncio.sleep(max(remain_time - elapsed, 0))
         except asyncio.CancelledError:
             _LOGGER.debug("Live session cancelled")
         finally:
