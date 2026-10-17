@@ -29,6 +29,15 @@ CHARGING_ACTIVE_STATES = {
     "11",  # PV Power Charging
 }
 
+# The API returns the Working Status as a label (realValue) rather than the
+# numeric code, e.g. "Charging" (same text as the Status sensor)
+CHARGING_ACTIVE_LABELS = {
+    "charging",
+    "starting charging",
+    "pv power waiting",
+    "pv power charging",
+}
+
 
 # ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -56,14 +65,15 @@ class ChargerSwitchHandler(BaseDeviceHandler):
 class FusionSolarChargerControlSwitch(CoordinatorEntity, SwitchEntity):
     """Switch to start/stop EV charging.
 
-    State is derived from Working Status (signal 10004) on the charging pile child.
+    State is derived only from Working Status (signal 10004) on the charging
+    pile child, never from the last command sent: it reflects what the charger
+    actually does (refreshed by the coordinator every 15 s).
     Write uses the homemgr charge-control endpoint on port 32800.
     """
 
     def __init__(self, coordinator, device_info):
         super().__init__(coordinator)
         self._attr_device_info = device_info
-        self._optimistic_state = None  # None = use API, True/False = pending
 
         device_id = list(device_info["identifiers"])[0][1]
         self._attr_unique_id = f"{device_id}_charge_control"
@@ -83,9 +93,6 @@ class FusionSolarChargerControlSwitch(CoordinatorEntity, SwitchEntity):
         Reads from the normalized value_map returned by the new charger_api.
         Working Status signal id=10004: active states are 3, 8, 10, 11.
         """
-        if self._optimistic_state is not None:
-            return self._optimistic_state
-
         data = self.coordinator.data
         if not data:
             return None
@@ -94,14 +101,12 @@ class FusionSolarChargerControlSwitch(CoordinatorEntity, SwitchEntity):
         value_map = data.get("value_map", {})
         for key, val in value_map.items():
             if isinstance(key, tuple) and key[1] == SIGNAL_ID_WORKING_STATUS:
+                if val is None:
+                    return None
                 try:
-                    api_value = str(int(float(val)))
+                    return str(int(float(val))) in CHARGING_ACTIVE_STATES
                 except (TypeError, ValueError):
-                    api_value = str(val)
-                is_charging = api_value in CHARGING_ACTIVE_STATES
-                if self._optimistic_state is not None and is_charging == self._optimistic_state:
-                    self._optimistic_state = None
-                return is_charging
+                    return str(val).strip().lower() in CHARGING_ACTIVE_LABELS
 
         return None
 
@@ -116,8 +121,6 @@ class FusionSolarChargerControlSwitch(CoordinatorEntity, SwitchEntity):
     async def _charge_control(self, action: str) -> None:
         device_dn = list(self._attr_device_info["identifiers"])[0][1]
         _LOGGER.debug("Charge control %s → %s", device_dn, action)
-        self._optimistic_state = (action == "start")
-        self.async_write_ha_state()
         client = self.hass.data[DOMAIN][self.coordinator.config_entry.entry_id]
         try:
             await self.hass.async_add_executor_job(
@@ -125,8 +128,6 @@ class FusionSolarChargerControlSwitch(CoordinatorEntity, SwitchEntity):
             )
         except Exception as err:
             _LOGGER.error("Charge control %s failed: %s", action, err)
-            self._optimistic_state = None
-            self.async_write_ha_state()
 
     @property
     def available(self) -> bool:
