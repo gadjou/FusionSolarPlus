@@ -145,9 +145,15 @@ class BatteryControl:
     async def _write(self, changes: dict[int, str]) -> None:
         client = self.hass.data[DOMAIN][self.entry.entry_id]
         _LOGGER.debug("Writing battery %s config: %s", self.battery_dn, changes)
-        await self.hass.async_add_executor_job(
-            client.set_battery_config, self.battery_dn, changes
-        )
+        try:
+            await self.hass.async_add_executor_job(
+                client.set_battery_config, self.battery_dn, changes
+            )
+        except Exception as err:
+            # HomeAssistantError lets automations retry with continue_on_error
+            raise HomeAssistantError(
+                f"Writing battery {self.battery_dn} config {changes} failed: {err}"
+            ) from err
         now = time.monotonic()
         for signal_id, value in changes.items():
             self._pending[signal_id] = (value, now)
