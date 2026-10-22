@@ -190,13 +190,32 @@ def logged_in(func):
             self._configure_session()
 
         try:
-            result = func(self, *args, **kwargs)
-        except json.JSONDecodeError:
+            return func(self, *args, **kwargs)
+        except (json.JSONDecodeError, requests.exceptions.JSONDecodeError):
+            # requests raises its own JSONDecodeError (simplejson based when
+            # simplejson is installed), which json.JSONDecodeError doesn't catch.
+            # An HTML page instead of JSON usually means the session is no longer
+            # valid although is-session-alive still says so: log in again and
+            # retry once. Not while already logging in (keep_alive is decorated).
+            if getattr(self, "_relogging_in", False):
+                raise
+            _LOGGER.warning(
+                "Invalid response for %s. Resetting session and retrying...",
+                func.__name__,
+            )
+            self._relogging_in = True
+            try:
+                self._session = requests.Session()
+                self._configure_session()
+            finally:
+                self._relogging_in = False
+
+        try:
+            return func(self, *args, **kwargs)
+        except (json.JSONDecodeError, requests.exceptions.JSONDecodeError):
             # this may indicate that the login failed
             _LOGGER.error("Login apparently failed. Received invalid response.")
             raise FusionSolarException("Failed to reset session and login again.")
-
-        return result
 
     return wrapper
 
@@ -654,8 +673,11 @@ class FusionSolarClient:
         )
         r.raise_for_status()
 
-        # get the response
-        response_data = r.json()
+        # get the response (an HTML page means the session is gone)
+        try:
+            response_data = r.json()
+        except (json.JSONDecodeError, requests.exceptions.JSONDecodeError):
+            return False
 
         if "code" not in response_data or response_data["code"] != 0:
             return False
